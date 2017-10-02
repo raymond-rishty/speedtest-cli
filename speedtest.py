@@ -635,6 +635,24 @@ class SpeedtestResults(object):
     def __repr__(self):
         return repr(self.dict())
 
+
+    def index(self):
+        """POST data to elasticsearch"""
+
+        request = Request('http://localhost:9200/speedtest/speedtest', data=(self.json()), headers={})
+        f, e = catch_request(request)
+        if e:
+            raise ShareResultsConnectFailure(e)
+
+        response = f.read()
+        code = f.code
+        f.close()
+
+        if int(code) > 299:
+            raise ShareResultsSubmitFailure('Could not submit results to elasticsearch')
+
+        return response
+
     def share(self):
         """POST data to the speedtest.net API to obtain a share results
         link
@@ -1266,6 +1284,8 @@ def parse_args():
                         help='Suppress verbose output, only show basic '
                              'information in JSON format. Speeds listed in '
                              'bit/s and not affected by --bytes')
+    parser.add_argument('--elasticsearch', action='store_true', default=False,
+                        help='Load info to elasticsearch')
     parser.add_argument('--list', action='store_true',
                         help='Display a list of speedtest.net servers '
                              'sorted by distance')
@@ -1376,12 +1396,12 @@ def shell():
     # Pre-cache the user agent string
     build_user_agent()
 
-    if args.simple or args.csv or args.json:
+    if args.simple or args.csv or args.json or args.elasticsearch:
         quiet = True
     else:
         quiet = False
 
-    if args.csv or args.json:
+    if args.csv or args.json or args.elasticsearch:
         machine_format = True
     else:
         machine_format = False
@@ -1484,6 +1504,8 @@ def shell():
         if args.share:
             results.share()
         print_(results.json())
+    elif args.elasticsearch:
+        results.index()
 
     if args.share and not machine_format:
         printer('Share results: %s' % results.share())
